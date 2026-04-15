@@ -1,5 +1,13 @@
 import React, { useCallback, useRef, useState } from 'react';
 
+const UploadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+);
+
 export default function ImageUploader({ onFileSelect, disabled }) {
   const [dragover, setDragover] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -46,11 +54,13 @@ export default function ImageUploader({ onFileSelect, disabled }) {
         aria-label="Upload an image for benchmarking"
         id="dropzone"
       >
-        <span className="dropzone__icon">📸</span>
+        <div className="dropzone__icon">
+          <UploadIcon />
+        </div>
         <p className="dropzone__text">
           Drag & drop an image here, or <strong>browse</strong>
         </p>
-        <p className="dropzone__hint">JPG, PNG, WebP — up to 20 MB</p>
+        <p className="dropzone__hint">JPG, PNG, WebP &mdash; up to 20 MB</p>
         <input
           ref={inputRef}
           type="file"

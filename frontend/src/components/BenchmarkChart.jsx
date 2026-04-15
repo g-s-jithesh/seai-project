@@ -9,7 +9,6 @@ export default function BenchmarkChart({ title, cpuMs, gpuMs, id }) {
     <div className="bar-chart glass" id={id}>
       <h3 className="bar-chart__title">{title}</h3>
 
-      {/* CPU bar */}
       <div className="bar-row bar-row--cpu">
         <span className="bar-row__label">CPU</span>
         <div className="bar-row__track">
@@ -22,7 +21,6 @@ export default function BenchmarkChart({ title, cpuMs, gpuMs, id }) {
         </div>
       </div>
 
-      {/* GPU bar */}
       {gpuMs != null && (
         <div className="bar-row bar-row--gpu">
           <span className="bar-row__label">GPU</span>

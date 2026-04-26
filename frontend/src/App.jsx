@@ -169,9 +169,9 @@ export default function App() {
 
           {/* Inference Timing Chart */}
           <BenchmarkChart
-            title="ResNet-50 Inference Latency"
-            cpuMs={results.inference.cpu.time_ms}
-            gpuMs={results.inference.gpu?.time_ms}
+            title="ResNet-50 Inference Latency (Compute Only)"
+            cpuMs={results.inference.cpu.execution_ms}
+            gpuMs={results.inference.gpu?.execution_ms}
             id="chart-inference"
           />
 
@@ -183,8 +183,11 @@ export default function App() {
                 CPU Inference
               </div>
               <div className="metric-card__time">
-                {results.inference.cpu.time_ms.toFixed(2)}
+                {results.inference.cpu.execution_ms.toFixed(2)}
                 <span style={{ fontSize: '0.5em', opacity: 0.5 }}> ms</span>
+              </div>
+              <div className="metric-card__subtext" style={{fontSize: '0.75rem', opacity: 0.7, marginTop: '5px'}}>
+                Transfer: {results.inference.cpu.transfer_ms.toFixed(2)} ms
               </div>
             </div>
 
@@ -195,8 +198,11 @@ export default function App() {
                   GPU Inference (CUDA)
                 </div>
                 <div className="metric-card__time">
-                  {results.inference.gpu.time_ms.toFixed(2)}
+                  {results.inference.gpu.execution_ms.toFixed(2)}
                   <span style={{ fontSize: '0.5em', opacity: 0.5 }}> ms</span>
+                </div>
+                <div className="metric-card__subtext" style={{fontSize: '0.75rem', opacity: 0.7, marginTop: '5px'}}>
+                  PCIe Transfer: {results.inference.gpu.transfer_ms.toFixed(2)} ms
                 </div>
               </div>
             )}

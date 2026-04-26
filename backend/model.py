@@ -90,6 +90,11 @@ def _load_model(device: str) -> torch.nn.Module:
         model = models.resnet50(pretrained=True)
 
     model.eval()
+    
+    if device == "cuda":
+        # Crucial for performance as mentioned in the paper: enables cuDNN auto-tuner
+        torch.backends.cudnn.benchmark = True
+
     model = model.to(device)
 
     if device == "cpu":
@@ -106,20 +111,30 @@ def prepare_image(image_bytes: bytes) -> Image.Image:
     return img
 
 
-def _run_inference(model: torch.nn.Module, tensor: torch.Tensor, device: str, warmup: int = 3) -> tuple[float, list[dict]]:
+def _run_inference(model: torch.nn.Module, tensor: torch.Tensor, device: str, warmup: int = 3) -> tuple[float, float, list[dict]]:
     """
-    Run inference and return (elapsed_ms, top5_predictions).
+    Run inference and return (transfer_ms, execution_ms, top5_predictions).
 
     Includes warmup passes (especially important for GPU to fill caches/JIT).
     Uses CUDA events for GPU timing and perf_counter for CPU timing.
     """
-    tensor = tensor.to(device)
+    # 1. Measure Data Transfer Time (PCIe Bottleneck simulation)
+    transfer_start = time.perf_counter()
+    if device == "cuda":
+        # Pin memory to ensure fast PCIe DMA transfer as outlined in Section 3.1.2
+        tensor = tensor.pin_memory()
+        tensor = tensor.to(device, non_blocking=True)
+        torch.cuda.synchronize() # Wait for transfer to finish
+    else:
+        tensor = tensor.to(device)
+    transfer_ms = (time.perf_counter() - transfer_start) * 1000.0
 
     # Warmup
     with torch.no_grad():
         for _ in range(warmup):
             model(tensor)
 
+    # 2. Measure Execution Time
     if device == "cuda":
         torch.cuda.synchronize()
         start_event = torch.cuda.Event(enable_timing=True)
@@ -129,12 +144,12 @@ def _run_inference(model: torch.nn.Module, tensor: torch.Tensor, device: str, wa
             output = model(tensor)
         end_event.record()
         torch.cuda.synchronize()
-        elapsed_ms = start_event.elapsed_time(end_event)
+        execution_ms = start_event.elapsed_time(end_event)
     else:
         start = time.perf_counter()
         with torch.no_grad():
             output = model(tensor)
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        execution_ms = (time.perf_counter() - start) * 1000.0
 
     # Post-process
     probabilities = torch.nn.functional.softmax(output[0], dim=0)
@@ -149,7 +164,7 @@ def _run_inference(model: torch.nn.Module, tensor: torch.Tensor, device: str, wa
             "confidence": round(top5.values[i].item() * 100, 2),
         })
 
-    return elapsed_ms, predictions
+    return transfer_ms, execution_ms, predictions
 
 
 def benchmark_image(image_bytes: bytes) -> dict:
@@ -169,13 +184,14 @@ def benchmark_image(image_bytes: bytes) -> dict:
 
     # ---- ResNet-50 Inference ------------------------------------------------
     cpu_model = _load_model("cpu")
-    cpu_time_ms, cpu_predictions = _run_inference(cpu_model, input_tensor, "cpu")
+    cpu_transfer_ms, cpu_execution_ms, cpu_predictions = _run_inference(cpu_model, input_tensor, "cpu")
 
-    gpu_time_ms = None
+    gpu_execution_ms = None
+    gpu_transfer_ms = None
     gpu_predictions = None
     if cuda_available:
         gpu_model = _load_model("cuda")
-        gpu_time_ms, gpu_predictions = _run_inference(gpu_model, input_tensor, "cuda")
+        gpu_transfer_ms, gpu_execution_ms, gpu_predictions = _run_inference(gpu_model, input_tensor, "cuda")
 
     # ---- Synthetic Tensor Workload ------------------------------------------
     matrix_size = 2048
@@ -204,18 +220,20 @@ def benchmark_image(image_bytes: bytes) -> dict:
         gpu_matmul_ms = start_event.elapsed_time(end_event)
 
     # ---- Build results dict -------------------------------------------------
-    inference_speedup = round(cpu_time_ms / gpu_time_ms, 2) if gpu_time_ms and gpu_time_ms > 0 else None
+    inference_speedup = round(cpu_execution_ms / gpu_execution_ms, 2) if gpu_execution_ms and gpu_execution_ms > 0 else None
     matmul_speedup = round(cpu_matmul_ms / gpu_matmul_ms, 2) if gpu_matmul_ms and gpu_matmul_ms > 0 else None
 
     return {
         "device_info": device_info,
         "inference": {
             "cpu": {
-                "time_ms": round(cpu_time_ms, 3),
+                "transfer_ms": round(cpu_transfer_ms, 3),
+                "execution_ms": round(cpu_execution_ms, 3),
                 "predictions": cpu_predictions,
             },
             "gpu": {
-                "time_ms": round(gpu_time_ms, 3) if gpu_time_ms is not None else None,
+                "transfer_ms": round(gpu_transfer_ms, 3) if gpu_transfer_ms is not None else None,
+                "execution_ms": round(gpu_execution_ms, 3) if gpu_execution_ms is not None else None,
                 "predictions": gpu_predictions,
             } if cuda_available else None,
             "speedup": inference_speedup,

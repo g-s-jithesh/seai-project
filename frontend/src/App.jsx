@@ -169,9 +169,11 @@ export default function App() {
 
           {/* Inference Timing Chart */}
           <BenchmarkChart
-            title="ResNet-50 Inference Latency (Compute Only)"
+            title="ResNet-50 Inference Latency (Compute + Transfer)"
             cpuMs={results.inference.cpu.execution_ms}
             gpuMs={results.inference.gpu?.execution_ms}
+            cpuTransferMs={results.inference.cpu.transfer_ms}
+            gpuTransferMs={results.inference.gpu?.transfer_ms}
             id="chart-inference"
           />
 
